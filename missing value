@@ -1,0 +1,52 @@
+import pandas as pd
+import numpy as np
+from utilsforecast.preprocessing import fill_gaps
+
+# ── 1. Basic Missing Value Check ──────────────────────────────────
+print("=== Missing Value Summary ===")
+print(df.isnull().sum())
+print(f"\nTotal missing: {df.isnull().sum().sum()}")
+print(f"% missing per column:\n{df.isnull().mean() * 100}")
+
+# ── 2. Check per series ───────────────────────────────────────────
+missing_per_series = (
+    df.groupby('unique_id')['y']
+    .apply(lambda x: x.isnull().sum())
+    .reset_index(name='missing_count')
+)
+print("\n=== Missing Values per Series ===")
+print(missing_per_series[missing_per_series['missing_count'] > 0])
+
+# ── 3. Check for gaps in dates (missing timestamps) ──────────────
+print("\n=== Filling Date Gaps ===")
+df_filled = fill_gaps(df, freq='D')  # adjust freq as needed
+n_gaps = len(df_filled) - len(df)
+print(f"Found {n_gaps} missing timestamps across all series")
+
+# Show which rows were added (these are implicit missing values)
+new_rows = df_filled[df_filled['y'].isnull()]
+print(f"\nImplicit missing rows:\n{new_rows}")
+
+# ── 4. Handle Missing Values ─────────────────────────────────────
+# Option A: Forward fill
+df_filled['y'] = df_filled.groupby('unique_id')['y'].ffill()
+
+# Option B: Backward fill remaining NaNs
+df_filled['y'] = df_filled.groupby('unique_id')['y'].bfill()
+
+# Option C: Interpolate
+# df_filled['y'] = df_filled.groupby('unique_id')['y'].transform(
+#     lambda x: x.interpolate(method='linear')
+# )
+
+# Option D: Drop series with too many missing values
+threshold = 0.1  # 10%
+valid_series = (
+    df.groupby('unique_id')['y']
+    .apply(lambda x: x.isnull().mean() < threshold)
+)
+df_clean = df[df['unique_id'].isin(valid_series[valid_series].index)]
+
+# ── 5. Verify no missing values remain ───────────────────────────
+print("\n=== After Cleaning ===")
+print(f"Missing values remaining: {df_filled['y'].isnull().sum()}")
